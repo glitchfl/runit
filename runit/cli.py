@@ -29,6 +29,7 @@ HELP_TEXT = """Save commands, run them by name.
   runit <name> [args]       Run a saved command
   runit add <name> "cmd"    Save a new command
   runit remove <name>       Remove a command
+  runit reset               Clear all commands
   runit list                Show all commands
 \b
 Examples:
@@ -216,3 +217,32 @@ def remove(name, is_global):
     save_config(commands, path)
     scope = "global" if is_global else "project"
     click.secho(f"Removed {scope} command '{name}'", fg="green")
+
+
+@cli.command()
+@click.option("--global", "-g", "is_global", is_flag=True, help="Clear global commands.")
+@click.option("--all", "-a", "reset_all", is_flag=True, help="Clear both project and global commands.")
+def reset(is_global, reset_all):
+    """Clear all saved commands.
+
+    \b
+    runit reset          Clear project commands
+    runit reset -g       Clear global commands
+    runit reset -a       Clear both project and global commands
+    """
+    targets = []
+
+    if reset_all:
+        targets.append(("project", find_config()))
+        targets.append(("global", global_config_path()))
+    elif is_global:
+        targets.append(("global", global_config_path()))
+    else:
+        targets.append(("project", find_config()))
+
+    for scope, path in targets:
+        if path.exists():
+            path.unlink()
+            click.secho(f"Cleared all {scope} commands.", fg="green")
+        else:
+            click.echo(f"No {scope} commands to clear.")
