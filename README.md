@@ -233,6 +233,13 @@ runit edit deploy "new-cmd" --mode sequential
 runit edit -g gs "git status -sb --porcelain"
 ```
 
+## Renaming commands
+
+```bash
+runit rename test t          # rename project command
+runit rename -g gs gst       # rename global command
+```
+
 ## Removing commands
 
 ```bash
@@ -268,11 +275,12 @@ No files in your project directory. Nothing to `.gitignore`.
 | `runit add <name> "cmd" ...` | Save a new command |
 | `runit edit <name> "cmd" ...` | Update an existing command |
 | `runit show <name>` | Show full command details |
+| `runit rename <old> <new>` | Rename a command |
 | `runit remove <name>` | Remove a command |
 | `runit reset` | Clear all commands |
 | `runit list` | List all commands (built-in, global, project) |
 
-Add `-g` to `add`, `edit`, `remove`, `list`, or `reset` to target global commands.
+Add `-g` to `add`, `edit`, `rename`, `remove`, `list`, or `reset` to target global commands.
 
 ### Step syntax
 
@@ -285,6 +293,8 @@ Add `-g` to `add`, `edit`, `remove`, `list`, or `reset` to target global command
 ## Credit
 
 Credit to @Eyalcfish for the idea and its based on his pulse project.
-## License
 
-MIT
+
+## Disclaimer
+
+AI was used to generate almost all of this tool.

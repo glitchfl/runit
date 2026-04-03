@@ -31,6 +31,7 @@ HELP_TEXT = """Save commands, run them by name.
   runit add <name> "cmd"    Save a new command
   runit show <name>         Show command details
   runit edit <name> "cmd"   Update a command
+  runit rename <old> <new>  Rename a command
   runit remove <name>       Remove a command
   runit reset               Clear all commands
   runit list                Show all commands
@@ -344,6 +345,49 @@ def remove(name, is_global):
     save_config(commands, path)
     scope = "global" if is_global else "project"
     click.secho(f"Removed {scope} command '{name}'", fg="green")
+
+
+@cli.command()
+@click.argument("old_name")
+@click.argument("new_name")
+@click.option("--global", "-g", "is_global", is_flag=True, help="Rename a global command.")
+def rename(old_name, new_name, is_global):
+    """Rename a saved command.
+
+    \b
+    runit rename <old> <new>
+    runit rename -g <old> <new>
+    """
+    try:
+        path = global_config_path() if is_global else find_config()
+        commands = load_config(path)
+    except RunitError as e:
+        click.secho(str(e), fg="red", err=True)
+        sys.exit(1)
+
+    if old_name not in commands:
+        if old_name in builtin_commands():
+            click.secho(
+                f"'{old_name}' is a built-in command and cannot be renamed.",
+                fg="yellow",
+                err=True,
+            )
+        else:
+            scope = "global" if is_global else "project"
+            click.secho(f"'{old_name}' not found in {scope} commands.", fg="red", err=True)
+        sys.exit(1)
+
+    if new_name in commands:
+        scope = "global" if is_global else "project"
+        click.secho(f"'{new_name}' already exists in {scope} commands.", fg="yellow", err=True)
+        sys.exit(1)
+
+    cmd = commands.pop(old_name)
+    cmd.name = new_name
+    commands[new_name] = cmd
+    save_config(commands, path)
+    scope = "global" if is_global else "project"
+    click.secho(f"Renamed {scope} command '{old_name}' → '{new_name}'", fg="green")
 
 
 @cli.command()
