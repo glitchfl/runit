@@ -45,35 +45,44 @@ runit deploy
 
 ## Parameters
 
-Some commands are almost the same every time, just with a different value here and there. Use `{var}` placeholders for that.
+Some commands are almost the same every time, just with a different value here and there. Use `{var}` placeholders and pass values positionally - just type the values after the command name, in order.
 
 ```bash
 runit add deploy "kubectl apply -f k8s/{env}.yaml" "echo 'deployed to {env}'"
 
-runit deploy env=staging
+runit deploy staging
 # $ kubectl apply -f k8s/staging.yaml
 # $ echo 'deployed to staging'
 
-runit deploy env=prod
+runit deploy prod
 # $ kubectl apply -f k8s/prod.yaml
 # $ echo 'deployed to prod'
 ```
 
-You can set defaults with `{var:default}` — if you don't pass the value, it uses the default.
+Multiple parameters just go in order:
+
+```bash
+runit add ssh "ssh {user}@{host}"
+
+runit ssh admin 192.168.1.10
+# $ ssh admin@192.168.1.10
+```
+
+You can set defaults with `{var:default}` - if you don't pass it, the default kicks in.
 
 ```bash
 runit add push "docker push myapp:{tag:latest}"
 
 runit push              # uses tag=latest
-runit push tag=v2.0     # uses tag=v2.0
+runit push v2.0         # uses tag=v2.0
 ```
 
 If you forget a required parameter, runit tells you what's missing:
 
 ```
 $ runit deploy
-Missing required args: env
-Usage: runit deploy env=<value>
+Missing: env
+Usage: runit deploy <env>
 ```
 
 ## Random mode

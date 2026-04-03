@@ -52,16 +52,7 @@ def run(name, extra_args):
         )
         sys.exit(1)
 
-    # Parse key=value args
-    args = {}
-    for arg in extra_args:
-        if "=" not in arg:
-            click.secho(f"Invalid argument '{arg}'. Use key=value format.", fg="red", err=True)
-            sys.exit(1)
-        key, value = arg.split("=", 1)
-        args[key] = value
-
-    exit_code = execute(commands[name], args)
+    exit_code = execute(commands[name], list(extra_args))
     sys.exit(exit_code)
 
 
@@ -113,10 +104,10 @@ def _format_params(cmd: CommandConfig) -> str:
     parts = []
     for name, default in params.items():
         if default is not None:
-            parts.append(f"{name}={default}")
+            parts.append(f"[{name}={default}]")
         else:
             parts.append(f"<{name}>")
-    return "  args: " + " ".join(parts)
+    return "  " + " ".join(parts)
 
 
 def _print_commands(commands: dict[str, CommandConfig]) -> None:
