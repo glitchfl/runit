@@ -11,7 +11,7 @@ from runit.config import (
     save_config,
 )
 from runit.exceptions import RunitError
-from runit.runner import execute, parse_params
+from runit.runner import execute, parse_captures, parse_params
 
 class RunitHelpFormatter(click.HelpFormatter):
     def write_text(self, text):
@@ -43,6 +43,10 @@ Examples:
 \b
   runit add -g gs "git status -sb"
   runit gs
+\b
+Capture output as variables:
+  runit add myip "@ip ifconfig en0 | grep inet" "echo {ip}"
+  runit myip
 """
 
 
@@ -167,6 +171,10 @@ def show(name):
                 parts.append(f"{param_name} (required)")
         click.echo(f"  params:  {', '.join(parts)}")
 
+    captures = parse_captures(cmd.steps)
+    if captures:
+        click.echo(f"  captures: {', '.join(captures)}")
+
     click.echo(f"  steps:")
     for i, step in enumerate(cmd.steps, 1):
         click.echo(f"    {i}. {step}")
@@ -217,6 +225,10 @@ def add(name, steps, mode, is_global):
     Parameters:
       Use {var} for required values, {var:default} for optional ones.
       Pass them positionally when running: runit <name> value1 value2
+    \b
+    Captures:
+      Use @varname to capture a command's output as a variable.
+      Reference it in later steps with {varname}.
     """
     try:
         path = global_config_path() if is_global else find_config()

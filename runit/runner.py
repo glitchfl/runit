@@ -9,19 +9,40 @@ from runit.config import CommandConfig
 # Matches {var} or {var:default}
 PARAM_PATTERN = re.compile(r"\{(\w+)(?::([^}]*))?\}")
 
+# Matches capture step: @varname command...
+CAPTURE_PATTERN = re.compile(r"^@(\w+)\s+(.+)$", re.DOTALL)
+
+
+def parse_captures(steps: list[str]) -> list[str]:
+    """Extract capture variable names from steps like '@varname command'.
+
+    Returns list of variable names in order of appearance.
+    """
+    captures = []
+    for step in steps:
+        match = CAPTURE_PATTERN.match(step)
+        if match:
+            captures.append(match.group(1))
+    return captures
+
 
 def parse_params(steps: list[str]) -> dict[str, str | None]:
     """Extract all {var} and {var:default} placeholders from steps.
 
     Returns dict of param_name -> default_value (None if no default),
-    in order of first appearance.
+    in order of first appearance. Variables defined by capture steps
+    (@varname ...) are excluded.
     """
+    capture_names = set(parse_captures(steps))
     params: dict[str, str | None] = {}
     for step in steps:
-        for match in PARAM_PATTERN.finditer(step):
+        # For capture steps, only parse the command part
+        capture_match = CAPTURE_PATTERN.match(step)
+        text = capture_match.group(2) if capture_match else step
+        for match in PARAM_PATTERN.finditer(text):
             name = match.group(1)
             default = match.group(2)
-            if name not in params:
+            if name not in params and name not in capture_names:
                 params[name] = default
     return params
 
@@ -30,7 +51,9 @@ def resolve_step(step: str, resolved: dict[str, str]) -> str:
     """Replace {var} and {var:default} placeholders with resolved values."""
     def replacer(match: re.Match) -> str:
         name = match.group(1)
-        return resolved[name]
+        if name in resolved:
+            return resolved[name]
+        return match.group(0)
     return PARAM_PATTERN.sub(replacer, step)
 
 
@@ -71,12 +94,36 @@ def execute(command: CommandConfig, positional_args: list[str] | None = None) ->
         return 1
 
     if command.mode == "random":
-        return _run_step(resolve_step(random.choice(command.steps), resolved))
+        return _execute_step(random.choice(command.steps), resolved)
 
     for step in command.steps:
-        exit_code = _run_step(resolve_step(step, resolved))
+        exit_code = _execute_step(step, resolved)
         if exit_code != 0:
             return exit_code
+    return 0
+
+
+def _execute_step(step: str, resolved: dict[str, str]) -> int:
+    """Execute a single step, handling both regular and capture steps."""
+    capture_match = CAPTURE_PATTERN.match(step)
+    if capture_match:
+        var_name = capture_match.group(1)
+        command = resolve_step(capture_match.group(2), resolved)
+        return _run_capture_step(var_name, command, resolved)
+    return _run_step(resolve_step(step, resolved))
+
+
+def _run_capture_step(var_name: str, command: str, resolved: dict[str, str]) -> int:
+    """Run a command, capture its stdout, and store as a variable."""
+    click.secho(f"$ @{var_name} {command}", fg="cyan")
+    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    if result.returncode != 0:
+        if result.stderr:
+            click.secho(result.stderr.rstrip(), fg="red", err=True)
+        return result.returncode
+    value = result.stdout.strip()
+    resolved[var_name] = value
+    click.secho(f"  {var_name} = {value}", fg="green")
     return 0
 
 
