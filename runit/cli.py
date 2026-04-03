@@ -11,7 +11,7 @@ from runit.config import (
     save_config,
 )
 from runit.exceptions import RunitError
-from runit.runner import execute
+from runit.runner import execute, parse_params
 
 
 class RunitGroup(click.Group):
@@ -28,7 +28,8 @@ def cli():
 
 @cli.command(hidden=True)
 @click.argument("name")
-def run(name):
+@click.argument("extra_args", nargs=-1)
+def run(name, extra_args):
     try:
         commands = load_merged_config()
     except RunitError as e:
@@ -51,13 +52,23 @@ def run(name):
         )
         sys.exit(1)
 
-    exit_code = execute(commands[name])
+    # Parse key=value args
+    args = {}
+    for arg in extra_args:
+        if "=" not in arg:
+            click.secho(f"Invalid argument '{arg}'. Use key=value format.", fg="red", err=True)
+            sys.exit(1)
+        key, value = arg.split("=", 1)
+        args[key] = value
+
+    exit_code = execute(commands[name], args)
     sys.exit(exit_code)
 
 
 @cli.command("list")
 @click.option("--global", "-g", "is_global", is_flag=True, help="Show only global commands.")
 def list_commands(is_global):
+    """List all available commands."""
     try:
         if is_global:
             commands = load_config(global_config_path())
@@ -94,13 +105,30 @@ def list_commands(is_global):
         click.echo("No project commands defined.")
 
 
+def _format_params(cmd: CommandConfig) -> str:
+    """Format parameter info for display."""
+    params = parse_params(cmd.steps)
+    if not params:
+        return ""
+    parts = []
+    for name, default in params.items():
+        if default is not None:
+            parts.append(f"{name}={default}")
+        else:
+            parts.append(f"<{name}>")
+    return "  args: " + " ".join(parts)
+
+
 def _print_commands(commands: dict[str, CommandConfig]) -> None:
     for name, cmd in commands.items():
         mode_tag = f"  [{cmd.mode}]" if cmd.mode != "sequential" else ""
+        param_info = _format_params(cmd)
         if len(cmd.steps) == 1:
             click.echo(f"  {name:<16} {cmd.steps[0]}{mode_tag}")
         else:
             click.echo(f"  {name:<16} ({len(cmd.steps)} steps){mode_tag}")
+        if param_info:
+            click.echo(f"  {'':<16}{param_info}")
 
 
 @cli.command()
@@ -109,7 +137,11 @@ def _print_commands(commands: dict[str, CommandConfig]) -> None:
 @click.option("--mode", "-m", type=click.Choice(["sequential", "random"]), default="sequential")
 @click.option("--global", "-g", "is_global", is_flag=True, help="Add as a global command.")
 def add(name, steps, mode, is_global):
-    """Add a command. Usage: runit add <name> "cmd1" "cmd2" ..."""
+    """Add a command. Usage: runit add <name> "cmd1" "cmd2" ...
+
+    Use {var} for required params, {var:default} for optional ones.
+    Example: runit add deploy "kubectl apply -f {env}.yaml"
+    """
     try:
         path = global_config_path() if is_global else find_config()
         commands = load_config(path)
