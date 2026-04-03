@@ -1,9 +1,8 @@
 import sys
-from pathlib import Path
 
 import click
 
-from runit.config import CONFIG_FILENAME, generate_default_config, load_config, save_config, CommandConfig
+from runit.config import CommandConfig, find_config, load_config, save_config
 from runit.exceptions import RunitError
 from runit.runner import execute
 
@@ -17,7 +16,7 @@ class RunitGroup(click.Group):
 
 @click.group(cls=RunitGroup)
 def cli():
-    """runit - run project commands defined in runit.yaml."""
+    """runit - run project commands defined per project."""
 
 
 @cli.command(hidden=True)
@@ -27,6 +26,14 @@ def run(name):
         commands = load_config()
     except RunitError as e:
         click.secho(str(e), fg="red", err=True)
+        sys.exit(1)
+
+    if not commands:
+        click.secho(
+            "No commands defined yet. Use 'runit add' to create one.",
+            fg="red",
+            err=True,
+        )
         sys.exit(1)
 
     if name not in commands:
@@ -50,10 +57,11 @@ def list_commands():
         sys.exit(1)
 
     if not commands:
-        click.echo("No commands defined in runit.yaml.")
+        click.echo("No commands defined yet. Use 'runit add' to create one.")
         return
 
-    click.secho("Available commands:\n", bold=True)
+    config_path = find_config()
+    click.secho(f"Commands ({config_path}):\n", bold=True)
     for name, cmd in commands.items():
         mode_tag = f"  [{cmd.mode}]" if cmd.mode != "sequential" else ""
         if len(cmd.steps) == 1:
@@ -98,14 +106,3 @@ def remove(name):
     del commands[name]
     save_config(commands)
     click.secho(f"Removed command '{name}'", fg="green")
-
-
-@cli.command()
-def init():
-    path = Path.cwd() / CONFIG_FILENAME
-    if path.exists():
-        click.secho(f"{CONFIG_FILENAME} already exists.", fg="yellow", err=True)
-        sys.exit(1)
-
-    path.write_text(generate_default_config())
-    click.secho(f"Created {CONFIG_FILENAME}", fg="green")

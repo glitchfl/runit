@@ -1,9 +1,10 @@
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
-from runit.exceptions import ConfigError, ConfigNotFoundError
+from runit.exceptions import ConfigError
 
 CONFIG_FILENAME = "runit.yaml"
 
@@ -17,31 +18,60 @@ class CommandConfig:
     mode: str = "sequential"
 
 
+def _find_git_root(start: Path) -> Path | None:
+    current = start.resolve()
+    for parent in [current, *current.parents]:
+        if (parent / ".git").is_dir():
+            return parent / ".git"
+    return None
+
+
+def _get_cache_path(directory: Path) -> Path:
+    resolved = directory.resolve()
+    key = hashlib.sha256(str(resolved).encode()).hexdigest()[:16]
+    folder_name = f"{resolved.name}_{key}"
+    cache_dir = Path.home() / ".cache" / "runit" / folder_name
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir / CONFIG_FILENAME
+
+
 def find_config() -> Path:
-    path = Path.cwd() / CONFIG_FILENAME
-    if not path.exists():
-        raise ConfigNotFoundError(
-            f"No {CONFIG_FILENAME} found in the current directory.\n"
-            f"Run 'runit init' to create one."
-        )
-    return path
+    """Find or create the config path for the current directory.
+
+    - Git repo: .git/runit.yaml
+    - Non-git: ~/.cache/runit/<dir>_<hash>/runit.yaml
+    """
+    cwd = Path.cwd()
+    git_dir = _find_git_root(cwd)
+
+    if git_dir is not None:
+        return git_dir / CONFIG_FILENAME
+
+    return _get_cache_path(cwd)
 
 
 def load_config(path: Path | None = None) -> dict[str, CommandConfig]:
     if path is None:
         path = find_config()
 
+    if not path.exists():
+        return {}
+
     try:
         raw = yaml.safe_load(path.read_text())
     except yaml.YAMLError as e:
-        raise ConfigError(f"Failed to parse {CONFIG_FILENAME}: {e}") from e
+        raise ConfigError(f"Failed to parse config: {e}") from e
+
+    if raw is None:
+        return {}
 
     if not isinstance(raw, dict) or "commands" not in raw:
-        raise ConfigError(
-            f"{CONFIG_FILENAME} must have a top-level 'commands' key."
-        )
+        raise ConfigError("Config must have a top-level 'commands' key.")
 
     commands_raw = raw["commands"]
+    if commands_raw is None:
+        return {}
+
     if not isinstance(commands_raw, dict):
         raise ConfigError("'commands' must be a mapping of command names.")
 
@@ -101,29 +131,3 @@ def save_config(commands: dict[str, CommandConfig], path: Path | None = None) ->
 
     output = {"commands": data}
     path.write_text(yaml.dump(output, default_flow_style=False, sort_keys=False))
-
-
-def generate_default_config() -> str:
-    return """\
-# runit.yaml - define your project commands here
-# Docs: https://github.com/chessitay/runit
-
-commands:
-  # Simple single command
-  hello:
-    run: "echo 'Hello from runit!'"
-
-  # Sequence of commands (runs in order)
-  build:
-    run:
-      - "echo 'Step 1: compiling...'"
-      - "echo 'Step 2: done!'"
-
-  # Random pick from a list
-  tip:
-    run:
-      - "echo 'Tip: commit often'"
-      - "echo 'Tip: write tests first'"
-      - "echo 'Tip: take breaks'"
-    mode: random
-"""
