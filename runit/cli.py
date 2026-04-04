@@ -55,6 +55,13 @@ Capture output as variables:
 
 class RunitGroup(click.Group):
     def parse_args(self, ctx, args):
+        if not args:
+            from runit.settings import load_settings
+
+            if load_settings().get("single_command") == "run":
+                project_cmds = load_config()
+                if len(project_cmds) == 1:
+                    args = ["run", next(iter(project_cmds))]
         if args and args[0] not in self.commands and not args[0].startswith("-"):
             args = ["run"] + args
         return super().parse_args(ctx, args)
@@ -430,8 +437,17 @@ def config_cmd(key, value):
     runit config storage_mode           Show current storage mode
     runit config storage_mode folder    Switch to folder-specific storage
     runit config storage_mode repo      Switch to repo-specific storage
+    \b
+    runit config single_command         Show current single-command behavior
+    runit config single_command run     Auto-run when only one project command exists
+    runit config single_command ignore  Do nothing (default)
     """
-    from runit.settings import VALID_STORAGE_MODES, load_settings, save_settings
+    from runit.settings import (
+        VALID_SINGLE_COMMAND,
+        VALID_STORAGE_MODES,
+        load_settings,
+        save_settings,
+    )
 
     settings = load_settings()
 
@@ -459,6 +475,22 @@ def config_cmd(key, value):
         settings["storage_mode"] = value
         save_settings(settings)
         click.secho(f"Storage mode set to '{value}'.", fg="green")
+    elif key == "single_command":
+        if value not in VALID_SINGLE_COMMAND:
+            click.secho(
+                f"Invalid value '{value}'. Must be one of: {', '.join(VALID_SINGLE_COMMAND)}",
+                fg="red",
+                err=True,
+            )
+            sys.exit(1)
+
+        if settings.get("single_command", "ignore") == value:
+            click.echo(f"single_command is already '{value}'.")
+            return
+
+        settings["single_command"] = value
+        save_settings(settings)
+        click.secho(f"single_command set to '{value}'.", fg="green")
     else:
         click.secho(f"Unknown setting '{key}'.", fg="red", err=True)
         sys.exit(1)

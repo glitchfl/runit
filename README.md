@@ -290,6 +290,29 @@ Stored separately from project commands, always available everywhere:
 - **macOS/Linux** — `~/.config/runit/runit.yaml`
 - **Windows** — `%APPDATA%/runit/runit.yaml`
 
+## Settings
+
+View or change any setting with `runit config <key> [value]`.
+
+### single_command
+
+When your project has exactly one saved command (globals and built-ins don't count), runit can run it automatically when you type `runit` with no arguments.
+
+```bash
+runit config single_command run     # auto-run when only one command exists
+runit config single_command ignore  # do nothing (default)
+runit config single_command         # show current value
+```
+
+### storage_mode
+
+Controls where project commands are saved. See [Storage modes](#storage-modes) above.
+
+```bash
+runit config storage_mode folder
+runit config storage_mode repo
+```
+
 ## All commands
 
 | Command | Description |

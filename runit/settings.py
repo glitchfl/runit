@@ -5,8 +5,9 @@ from pathlib import Path
 import yaml
 
 VALID_STORAGE_MODES = ("repo", "folder")
+VALID_SINGLE_COMMAND = ("ignore", "run")
 
-DEFAULT_SETTINGS = {"storage_mode": "repo"}
+DEFAULT_SETTINGS = {"storage_mode": "repo", "single_command": "ignore"}
 
 
 def base_config_dir() -> Path:
