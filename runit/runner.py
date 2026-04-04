@@ -98,6 +98,9 @@ def execute(command: CommandConfig, positional_args: list[str] | None = None) ->
         )
         return 1
 
+    if command.handler:
+        return command.handler(resolved)
+
     cwd: Path | None = None
 
     if command.mode == "random":

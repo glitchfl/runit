@@ -1,5 +1,6 @@
 import hashlib
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -16,6 +17,7 @@ class CommandConfig:
     name: str
     steps: list[str]
     mode: str = "sequential"
+    handler: Callable[[dict[str, str]], int] | None = field(default=None, repr=False)
 
 
 def _find_git_root(start: Path) -> Path | None:
@@ -59,12 +61,13 @@ def find_config() -> Path:
 
 def builtin_commands() -> dict[str, CommandConfig]:
     """Return built-in commands that ship with runit."""
+    from runit.builtins import heatmap, loc, prune
+
     return {
         "prune": CommandConfig(
             name="prune",
-            steps=[
-                "git fetch -p && for b in $(git branch -vv | grep ': gone]' | awk '{print $1}'); do git branch -D $b; done"
-            ],
+            steps=["fetch --prune and delete local branches with gone remotes"],
+            handler=prune,
         ),
         "untrack": CommandConfig(
             name="untrack",
@@ -72,15 +75,13 @@ def builtin_commands() -> dict[str, CommandConfig]:
         ),
         "loc": CommandConfig(
             name="loc",
-            steps=[
-                "find . -name '*.{ext:py}' -not -path '*/.git/*' -not -path '*/node_modules/*' -not -path '*/__pycache__/*' -not -path '*/venv/*' -exec wc -l {} + | sort -n"
-            ],
+            steps=["count lines of code in *.{ext:py} files"],
+            handler=loc,
         ),
         "heatmap": CommandConfig(
             name="heatmap",
-            steps=[
-                "git log --pretty=format: --name-only | sed '/^$/d' | sort | uniq -c | sort -rn | head -20"
-            ],
+            steps=["show 20 most frequently changed files in git history"],
+            handler=heatmap,
         ),
     }
 
