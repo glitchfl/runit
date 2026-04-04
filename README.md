@@ -15,7 +15,7 @@ That's it. No config files to manage, no setup step. Just add a command and run 
 pip install runit-dev
 ```
 
-Requires Python 3.10+.
+Requires Python 3.10+. Works on macOS, Linux, and Windows.
 
 ## Quick start
 

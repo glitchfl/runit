@@ -1,6 +1,8 @@
+import os
 import random
 import re
 import subprocess
+from pathlib import Path
 
 import click
 
@@ -11,6 +13,9 @@ PARAM_PATTERN = re.compile(r"\{(\w+)(?::([^}]*))?\}")
 
 # Matches capture step: @varname command...
 CAPTURE_PATTERN = re.compile(r"^@(\w+)\s+(.+)$", re.DOTALL)
+
+# Matches cd command: cd [path]
+CD_PATTERN = re.compile(r"^cd(?:\s+(.+))?$")
 
 
 def parse_captures(steps: list[str]) -> list[str]:
@@ -93,30 +98,57 @@ def execute(command: CommandConfig, positional_args: list[str] | None = None) ->
         )
         return 1
 
+    cwd: Path | None = None
+
     if command.mode == "random":
-        return _execute_step(random.choice(command.steps), resolved)
+        exit_code, _ = _execute_step(random.choice(command.steps), resolved, cwd)
+        return exit_code
 
     for step in command.steps:
-        exit_code = _execute_step(step, resolved)
+        exit_code, cwd = _execute_step(step, resolved, cwd)
         if exit_code != 0:
             return exit_code
     return 0
 
 
-def _execute_step(step: str, resolved: dict[str, str]) -> int:
+def _execute_step(step: str, resolved: dict[str, str], cwd: Path | None) -> tuple[int, Path | None]:
     """Execute a single step, handling both regular and capture steps."""
     capture_match = CAPTURE_PATTERN.match(step)
     if capture_match:
         var_name = capture_match.group(1)
         command = resolve_step(capture_match.group(2), resolved)
-        return _run_capture_step(var_name, command, resolved)
-    return _run_step(resolve_step(step, resolved))
+        return _run_capture_step(var_name, command, resolved, cwd), cwd
+
+    resolved_step = resolve_step(step, resolved)
+
+    # Handle cd specially so directory changes persist across steps
+    cd_match = CD_PATTERN.match(resolved_step.strip())
+    if cd_match:
+        raw_path = cd_match.group(1)
+        if raw_path is None:
+            new_cwd = Path.home()
+        else:
+            path_str = raw_path.strip().strip("\"'")
+            path_str = os.path.expanduser(path_str)
+            path_str = os.path.expandvars(path_str)
+            p = Path(path_str)
+            base = cwd or Path.cwd()
+            new_cwd = (p if p.is_absolute() else base / p).resolve()
+
+        if not new_cwd.is_dir():
+            click.secho(f"cd: no such file or directory: {raw_path}", fg="red", err=True)
+            return 1, cwd
+
+        click.secho(f"$ cd {raw_path or '~'}", fg="cyan")
+        return 0, new_cwd
+
+    return _run_step(resolved_step, cwd), cwd
 
 
-def _run_capture_step(var_name: str, command: str, resolved: dict[str, str]) -> int:
+def _run_capture_step(var_name: str, command: str, resolved: dict[str, str], cwd: Path | None) -> int:
     """Run a command, capture its stdout, and store as a variable."""
     click.secho(f"$ @{var_name} {command}", fg="cyan")
-    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    result = subprocess.run(command, shell=True, capture_output=True, text=True, cwd=cwd)
     if result.returncode != 0:
         if result.stderr:
             click.secho(result.stderr.rstrip(), fg="red", err=True)
@@ -127,8 +159,8 @@ def _run_capture_step(var_name: str, command: str, resolved: dict[str, str]) -> 
     return 0
 
 
-def _run_step(step: str) -> int:
+def _run_step(step: str, cwd: Path | None) -> int:
     """Run a single shell command, printing it before execution."""
     click.secho(f"$ {step}", fg="cyan")
-    result = subprocess.run(step, shell=True)
+    result = subprocess.run(step, shell=True, cwd=cwd)
     return result.returncode
