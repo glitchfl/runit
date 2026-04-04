@@ -1,6 +1,12 @@
 # runit
 
+[![PyPI version](https://img.shields.io/pypi/v/runit-dev)](https://pypi.org/project/runit-dev/)
+[![Python](https://img.shields.io/pypi/pyversions/runit-dev)](https://pypi.org/project/runit-dev/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/chessitay/runit/blob/main/LICENSE)
+
 Stop typing the same long commands over and over. `runit` lets you save commands with short names and run them instantly.
+
+![runit demo](assets/hero.gif)
 
 ```
 runit add build "cargo build --release"
@@ -32,6 +38,8 @@ runit list
 
 ## Multiple steps
 
+![Multi-step execution](assets/multistep.gif)
+
 Commands can be a sequence. They run in order, stopping if any step fails.
 
 ```bash
@@ -44,6 +52,8 @@ runit deploy
 ```
 
 ## Parameters
+
+![Parameters](assets/params.gif)
 
 Some commands are almost the same every time, just with a different value here and there. Use `{var}` placeholders and pass values positionally - just type the values after the command name, in order.
 
@@ -96,6 +106,8 @@ Usage: runit deploy <env>
 
 ## Capture output as variables
 
+![Capture variables](assets/capture.gif)
+
 Sometimes a later step needs the output of an earlier one. Prefix a step with `@varname` to capture its stdout into a variable, then use `{varname}` in any step that follows.
 
 ```bash
@@ -131,6 +143,8 @@ runit deploy staging
 If a capture step fails, execution stops — same as any other step.
 
 ## Random mode
+
+![Random mode](assets/random.gif)
 
 Pick a random command from a list each time you run it.
 
