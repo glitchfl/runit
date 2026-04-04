@@ -38,21 +38,76 @@ def _get_cache_path(directory: Path) -> Path:
 
 
 def global_config_path() -> Path:
-    """Return the path to the global config at ~/.config/runit/runit.yaml."""
-    config_dir = Path.home() / ".config" / "runit"
-    config_dir.mkdir(parents=True, exist_ok=True)
+    """Return the path to the global config (platform-aware)."""
+    from runit.settings import base_config_dir
+
+    config_dir = base_config_dir()
     return config_dir / CONFIG_FILENAME
+
+
+def _get_folder_mode_path(directory: Path) -> Path:
+    """Return the central config path for a directory in folder mode."""
+    from runit.settings import base_config_dir
+
+    resolved = directory.resolve()
+    key = hashlib.sha256(str(resolved).encode()).hexdigest()[:16]
+    folder_name = f"{resolved.name}_{key}"
+    projects_dir = base_config_dir() / "projects" / folder_name
+    projects_dir.mkdir(parents=True, exist_ok=True)
+    return projects_dir / CONFIG_FILENAME
+
+
+def _update_folder_index(directory: Path) -> None:
+    """Update the folder index with a directory entry."""
+    from runit.settings import base_config_dir
+
+    resolved = directory.resolve()
+    key = hashlib.sha256(str(resolved).encode()).hexdigest()[:16]
+    hash_name = f"{resolved.name}_{key}"
+
+    projects_dir = base_config_dir() / "projects"
+    projects_dir.mkdir(parents=True, exist_ok=True)
+    index_path = projects_dir / "index.yaml"
+
+    index = {}
+    if index_path.exists():
+        raw = yaml.safe_load(index_path.read_text())
+        if isinstance(raw, dict):
+            index = raw
+
+    index[str(resolved)] = hash_name
+    index_path.write_text(yaml.dump(index, default_flow_style=False, sort_keys=False))
+
+
+def load_folder_index() -> dict[str, str]:
+    """Return {folder_path: hash_name} for all tracked folders."""
+    from runit.settings import base_config_dir
+
+    index_path = base_config_dir() / "projects" / "index.yaml"
+    if not index_path.exists():
+        return {}
+    raw = yaml.safe_load(index_path.read_text())
+    return raw if isinstance(raw, dict) else {}
 
 
 def find_config() -> Path:
     """Find or create the config path for the current directory.
 
-    - Git repo: .git/runit.yaml
-    - Non-git: ~/.cache/runit/<dir>_<hash>/runit.yaml
-    """
-    cwd = Path.cwd()
-    git_dir = _find_git_root(cwd)
+    In repo mode (default):
+      - Git repo: .git/runit.yaml
+      - Non-git: ~/.cache/runit/<dir>_<hash>/runit.yaml
 
+    In folder mode:
+      - All directories: <config_dir>/projects/<name>_<hash>/runit.yaml
+    """
+    from runit.settings import get_storage_mode
+
+    cwd = Path.cwd()
+
+    if get_storage_mode() == "folder":
+        return _get_folder_mode_path(cwd)
+
+    git_dir = _find_git_root(cwd)
     if git_dir is not None:
         return git_dir / CONFIG_FILENAME
 
@@ -176,5 +231,14 @@ def save_config(commands: dict[str, CommandConfig], path: Path | None = None) ->
                 entry["mode"] = cmd.mode
             data[name] = entry
 
-    output = {"commands": data}
+    output: dict = {"commands": data}
+
+    # In folder mode, store the folder path and update the index
+    from runit.settings import get_storage_mode
+
+    if get_storage_mode() == "folder" and path != global_config_path():
+        cwd = Path.cwd().resolve()
+        output["folder"] = str(cwd)
+        _update_folder_index(cwd)
+
     path.write_text(yaml.dump(output, default_flow_style=False, sort_keys=False))

@@ -35,6 +35,7 @@ HELP_TEXT = """Save commands, run them by name.
   runit remove <name>       Remove a command
   runit reset               Clear all commands
   runit list                Show all commands
+  runit config <key> [val]  View or change settings
 \b
 Examples:
   runit add test "pytest -v"
@@ -417,3 +418,47 @@ def reset(is_global, reset_all):
             click.secho(f"Cleared all {scope} commands.", fg="green")
         else:
             click.echo(f"No {scope} commands to clear.")
+
+
+@cli.command("config")
+@click.argument("key")
+@click.argument("value", required=False)
+def config_cmd(key, value):
+    """View or change runit settings.
+
+    \b
+    runit config storage_mode           Show current storage mode
+    runit config storage_mode folder    Switch to folder-specific storage
+    runit config storage_mode repo      Switch to repo-specific storage
+    """
+    from runit.settings import VALID_STORAGE_MODES, load_settings, save_settings
+
+    settings = load_settings()
+
+    if value is None:
+        if key not in settings:
+            click.secho(f"Unknown setting '{key}'.", fg="red", err=True)
+            sys.exit(1)
+        click.echo(f"{key} = {settings[key]}")
+        return
+
+    if key == "storage_mode":
+        if value not in VALID_STORAGE_MODES:
+            click.secho(
+                f"Invalid mode '{value}'. Must be one of: {', '.join(VALID_STORAGE_MODES)}",
+                fg="red",
+                err=True,
+            )
+            sys.exit(1)
+
+        old_mode = settings.get("storage_mode", "repo")
+        if old_mode == value:
+            click.echo(f"Storage mode is already '{value}'.")
+            return
+
+        settings["storage_mode"] = value
+        save_settings(settings)
+        click.secho(f"Storage mode set to '{value}'.", fg="green")
+    else:
+        click.secho(f"Unknown setting '{key}'.", fg="red", err=True)
+        sys.exit(1)

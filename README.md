@@ -257,15 +257,38 @@ runit reset -g       # clear global commands
 runit reset -a       # clear both project and global
 ```
 
-## Where are commands stored?
+## Storage modes
 
-You don't need to think about this, but if you're curious:
+runit has two storage modes. Switch with `runit config storage_mode <mode>`.
 
-- **Git projects** - inside `.git/runit.yaml` (invisible, not tracked)
-- **Other directories** - in `~/.cache/runit/`, keyed by folder
-- **Global commands** - in `~/.config/runit/runit.yaml`
+### Repo mode (default)
 
-No files in your project directory. Nothing to `.gitignore`.
+Commands live with the project:
+
+- **Git projects** — inside `.git/runit.yaml` (invisible, not tracked)
+- **Other directories** — in `~/.cache/runit/`, keyed by folder
+
+### Folder mode
+
+All commands stored centrally, keyed by folder path:
+
+- **macOS/Linux** — `~/.config/runit/projects/`
+- **Windows** — `%APPDATA%/runit/projects/`
+
+```bash
+runit config storage_mode folder    # switch to folder mode
+runit config storage_mode repo      # switch back
+runit config storage_mode           # show current mode
+```
+
+Folder mode is useful if you want commands to survive repo deletion or work the same way regardless of git.
+
+### Global commands
+
+Stored separately from project commands, always available everywhere:
+
+- **macOS/Linux** — `~/.config/runit/runit.yaml`
+- **Windows** — `%APPDATA%/runit/runit.yaml`
 
 ## All commands
 
@@ -279,6 +302,7 @@ No files in your project directory. Nothing to `.gitignore`.
 | `runit remove <name>` | Remove a command |
 | `runit reset` | Clear all commands |
 | `runit list` | List all commands (built-in, global, project) |
+| `runit config <key> [val]` | View or change settings |
 
 Add `-g` to `add`, `edit`, `rename`, `remove`, `list`, or `reset` to target global commands.
 
