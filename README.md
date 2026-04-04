@@ -120,7 +120,7 @@ runit whoami
 # Hello, itayfliess
 ```
 
-A more practical example — grab your local IP and use it:
+A more practical example - grab your local IP and use it:
 
 ```bash
 runit add myip "@ip ifconfig en0 | grep 'inet ' | awk '{print \$2}'" "echo {ip}"
@@ -140,7 +140,7 @@ runit add deploy "@host cat config/{env}.txt" "scp build.tar {host}:/app/"
 runit deploy staging
 ```
 
-If a capture step fails, execution stops — same as any other step.
+If a capture step fails, execution stops - same as any other step.
 
 ## Random mode
 
@@ -279,15 +279,15 @@ runit has two storage modes. Switch with `runit config storage_mode <mode>`.
 
 Commands live with the project:
 
-- **Git projects** — inside `.git/runit.yaml` (invisible, not tracked)
-- **Other directories** — in `~/.cache/runit/`, keyed by folder
+- **Git projects** - inside `.git/runit.yaml` (invisible, not tracked)
+- **Other directories** - in `~/.cache/runit/`, keyed by folder
 
 ### Folder mode
 
 All commands stored centrally, keyed by folder path:
 
-- **macOS/Linux** — `~/.config/runit/projects/`
-- **Windows** — `%APPDATA%/runit/projects/`
+- **macOS/Linux** - `~/.config/runit/projects/`
+- **Windows** - `%APPDATA%/runit/projects/`
 
 ```bash
 runit config storage_mode folder    # switch to folder mode
@@ -301,8 +301,8 @@ Folder mode is useful if you want commands to survive repo deletion or work the 
 
 Stored separately from project commands, always available everywhere:
 
-- **macOS/Linux** — `~/.config/runit/runit.yaml`
-- **Windows** — `%APPDATA%/runit/runit.yaml`
+- **macOS/Linux** - `~/.config/runit/runit.yaml`
+- **Windows** - `%APPDATA%/runit/runit.yaml`
 
 ## Settings
 
@@ -347,9 +347,13 @@ Add `-g` to `add`, `edit`, `rename`, `remove`, `list`, or `reset` to target glob
 
 | Syntax | Meaning |
 |--------|---------|
-| `{var}` | Required parameter — pass positionally when running |
+| `{var}` | Required parameter - pass positionally when running |
 | `{var:default}` | Optional parameter with a default value |
-| `@varname cmd` | Capture step — runs `cmd`, stores stdout as `varname` |
+| `@varname cmd` | Capture step - runs `cmd`, stores stdout as `varname` |
+
+## Going further
+
+See **[Advanced usage & recipes](EXAMPLES.md)** for capture chains, multi-directory workflows, and real-world command patterns.
 
 ## Credit
 

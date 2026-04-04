@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ASSETS_DIR="$PROJECT_ROOT/assets"
-TAPES=("hero" "multistep" "params" "capture" "random")
+TAPES=("hero" "multistep" "params" "capture" "random" "capture-chain" "cd-steps" "capture-params" "workflow")
 
 # --- Dependency checks ---
 if ! command -v vhs &> /dev/null; then
@@ -27,6 +27,7 @@ mkdir -p "$DEMO_DIR"
 trap 'rm -rf "$DEMO_DIR"' EXIT
 
 git -C "$DEMO_DIR" init --quiet
+git -C "$DEMO_DIR" commit --allow-empty -m "init" --quiet
 
 echo "Demo directory: $DEMO_DIR"
 echo "Generating GIFs..."
