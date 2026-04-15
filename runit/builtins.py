@@ -17,17 +17,49 @@ def prune(resolved: dict[str, str]) -> int:
     if result.returncode != 0:
         return result.returncode
 
-    pruned = 0
+    # get current branch to skip it
+    head = subprocess.run(
+        ["git", "branch", "--show-current"],
+        capture_output=True, text=True,
+    )
+    current = head.stdout.strip() if head.returncode == 0 else ""
+
+    deleted: list[str] = []
+    kept: list[str] = []
+
     for line in result.stdout.splitlines():
         stripped = line.strip()
-        if ": gone]" in stripped:
-            branch = stripped.split()[0].lstrip("* ")
-            click.secho(f"$ git branch -D {branch}", fg="cyan")
-            subprocess.run(["git", "branch", "-D", branch])
-            pruned += 1
+        # skip the current branch marker
+        if stripped.startswith("* "):
+            stripped = stripped[2:]
+        branch = stripped.split()[0]
+        if ": gone]" in line:
+            if branch == current:
+                kept.append(branch)
+                continue
+            r = subprocess.run(["git", "branch", "-D", branch],
+                               capture_output=True, text=True)
+            if r.returncode == 0:
+                deleted.append(branch)
+            else:
+                kept.append(branch)
+        else:
+            kept.append(branch)
 
-    if pruned == 0:
+    click.echo()
+    if deleted:
+        click.secho(f"Deleted {len(deleted)} stale branches:", fg="red")
+        for b in deleted:
+            click.echo(f"  - {b}")
+    else:
         click.echo("No stale branches to prune.")
+
+    if kept:
+        click.echo()
+        click.secho(f"Kept {len(kept)} branches:", fg="green")
+        for b in kept:
+            click.echo(f"  - {b}")
+
     return 0
 
 
