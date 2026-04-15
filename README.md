@@ -164,7 +164,7 @@ runit ships with a set of built-in git/dev commands ready to use out of the box.
 | `runit prune` | Delete local branches whose remote has been deleted |
 | `runit untrack <path>` | Remove a file from git tracking (without touching `.gitignore`) |
 | `runit loc [ext]` | Count lines of code by file type (default: `.py`) |
-| `runit heatmap` | Show the 20 most frequently changed files in git history |
+| `runit glog` | Pretty git log graph with author, date, and branch info |
 
 ```bash
 runit prune
@@ -179,10 +179,8 @@ runit loc
 runit loc ts
 # Counts all .ts files
 
-runit heatmap
-#  11 runit/cli.py
-#   4 runit/runner.py
-#   ...
+runit glog
+# Pretty git log graph with colors, authors, dates, and branch refs
 ```
 
 Built-in commands can't be removed or edited, but you can override any of them by adding a project or global command with the same name.

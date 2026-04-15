@@ -116,7 +116,7 @@ def find_config() -> Path:
 
 def builtin_commands() -> dict[str, CommandConfig]:
     """Return built-in commands that ship with runit."""
-    from runit.builtins import heatmap, loc, prune
+    from runit.builtins import loc, prune
 
     return {
         "prune": CommandConfig(
@@ -133,10 +133,9 @@ def builtin_commands() -> dict[str, CommandConfig]:
             steps=["count lines of code in *.{ext:py} files"],
             handler=loc,
         ),
-        "heatmap": CommandConfig(
-            name="heatmap",
-            steps=["show 20 most frequently changed files in git history"],
-            handler=heatmap,
+        "glog": CommandConfig(
+            name="glog",
+            steps=["git log --graph --format='%C(auto)%h%Creset%x09%C(cyan)%an%Creset%x09%C(green)%ad%Creset%x09%s%x09%C(auto)%d%Creset'"],
         ),
     }
 
