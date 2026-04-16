@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "runit-dev"
-version = "0.1.5"
+version = "0.1.6"
 description = "Define and run named commands per project with runit.yaml"
 readme = "README.md"
 license = "MIT"

@@ -210,6 +210,95 @@ runit list           # shows both global and project commands
 runit list -g        # shows only global commands
 ```
 
+## Sharing commands
+
+Got a couple of commands you want to send to a teammate? `runit export` packs them into a single copy-pasteable code, and `runit import` unpacks it on the other side.
+
+```bash
+runit add dev-pc "flutter run -d macos --dart-define=FORCE_MODE=pc"
+runit add dev-mobile "flutter run -d macos --dart-define=FORCE_MODE=mobile"
+
+runit export dev-pc dev-mobile
+# runit:v1:Y29tbWFuZHM6CiAgZGV2LXBjOiBmbHV0dGVyIHJ1bi...
+# Share with: runit import <code>  (2 command(s))
+```
+
+The first line is the code itself (stdout); the hint goes to stderr, so you can pipe straight to your clipboard:
+
+```bash
+runit export dev-pc dev-mobile | pbcopy           # macOS
+runit export dev-pc dev-mobile | xclip -selection clipboard   # Linux
+```
+
+Run `runit export` with no names to share everything you've got saved.
+
+On the receiving end, paste the code into `runit import`. You'll be asked whether to save it to this project or globally:
+
+```bash
+runit import "runit:v1:Y29tbWFuZHM6..."
+# Importing: dev-pc, dev-mobile
+# Rename any of these? [y/N]:
+# Save to (local, global) [local]:
+# Imported 2 command(s) into project: dev-pc, dev-mobile
+```
+
+Skip the prompt with an explicit flag:
+
+```bash
+runit import "runit:v1:..." -l       # save to this project
+runit import "runit:v1:..." -g       # save globally
+```
+
+If a name already exists, the import skips it and tells you. Pass `--force` to overwrite.
+
+You can also pipe the code in instead of passing it as an argument:
+
+```bash
+pbpaste | runit import -l
+```
+
+### Renaming on import
+
+Whenever the code includes names, `runit import` asks `Rename any of these? [y/N]`. Hit Enter to keep them as-is; answer `y` to step through each command and pick a new name (Enter accepts the original):
+
+```
+Importing: dev-pc, dev-mobile
+Rename any of these? [y/N]: y
+
+dev-pc
+  flutter run -d macos --dart-define=FORCE_MODE=pc
+Name [dev-pc]: pc
+
+dev-mobile
+  flutter run -d macos --dart-define=FORCE_MODE=mobile
+Name [dev-mobile]:
+```
+
+### Sharing without names
+
+Pass `-N` to `runit export` to strip the names. Useful when your local names are personal (`my-quick-thing`) and the teammate should pick their own:
+
+```bash
+runit export -N dev-pc dev-mobile
+```
+
+The importer is then asked to name each one, with the steps shown for context:
+
+```
+runit import "runit:v1:..."
+Naming 2 command(s) from the share code:
+
+Command 1 of 2:
+  flutter run -d macos --dart-define=FORCE_MODE=pc
+Name: pc
+
+Command 2 of 2:
+  flutter run -d macos --dart-define=FORCE_MODE=mobile
+Name: mobile
+```
+
+Multi-step commands, parameters, capture chains, and `--mode random` all survive the round-trip — the share code carries the full command structure, not just the shell text.
+
 ## Inspecting commands
 
 Use `show` to see the full details of a command - where it's stored, its mode, parameters, and every step.
@@ -344,9 +433,11 @@ runit config storage_mode repo
 | `runit remove <name>` | Remove a command |
 | `runit reset` | Clear all commands |
 | `runit list` | List all commands (built-in, global, project) |
+| `runit export [names...]` | Pack commands into a copy-pasteable share code |
+| `runit import <code>` | Unpack a share code into this project or globally |
 | `runit config <key> [val]` | View or change settings |
 
-Add `-g` to `add`, `edit`, `rename`, `remove`, `list`, or `reset` to target global commands.
+Add `-g` to `add`, `edit`, `rename`, `remove`, `list`, or `reset` to target global commands. On `runit export`, `-g` looks names up in global commands; on `runit import`, `-g`/`-l` choose where to save (otherwise you're asked).
 
 ### Step syntax
 

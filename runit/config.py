@@ -200,18 +200,8 @@ def load_merged_config() -> dict[str, CommandConfig]:
     return {**filtered_builtins, **global_cmds, **project_cmds}
 
 
-def load_config(path: Path | None = None) -> dict[str, CommandConfig]:
-    if path is None:
-        path = find_config()
-
-    if not path.exists():
-        return {}
-
-    try:
-        raw = yaml.safe_load(path.read_text())
-    except yaml.YAMLError as e:
-        raise ConfigError(f"Failed to parse config: {e}") from e
-
+def parse_commands_dict(raw: dict | None) -> dict[str, CommandConfig]:
+    """Validate a raw {'commands': {...}} mapping into CommandConfig objects."""
     if raw is None:
         return {}
 
@@ -265,10 +255,23 @@ def load_config(path: Path | None = None) -> dict[str, CommandConfig]:
     return commands
 
 
-def save_config(commands: dict[str, CommandConfig], path: Path | None = None) -> None:
+def load_config(path: Path | None = None) -> dict[str, CommandConfig]:
     if path is None:
         path = find_config()
 
+    if not path.exists():
+        return {}
+
+    try:
+        raw = yaml.safe_load(path.read_text())
+    except yaml.YAMLError as e:
+        raise ConfigError(f"Failed to parse config: {e}") from e
+
+    return parse_commands_dict(raw)
+
+
+def serialize_commands_dict(commands: dict[str, CommandConfig]) -> dict[str, dict | str]:
+    """Inverse of parse_commands_dict: convert CommandConfigs to YAML-ready entries."""
     data: dict[str, dict | str] = {}
     for name, cmd in commands.items():
         if len(cmd.steps) == 1 and cmd.mode == "sequential":
@@ -278,8 +281,14 @@ def save_config(commands: dict[str, CommandConfig], path: Path | None = None) ->
             if cmd.mode != "sequential":
                 entry["mode"] = cmd.mode
             data[name] = entry
+    return data
 
-    output: dict = {"commands": data}
+
+def save_config(commands: dict[str, CommandConfig], path: Path | None = None) -> None:
+    if path is None:
+        path = find_config()
+
+    output: dict = {"commands": serialize_commands_dict(commands)}
 
     # In folder mode, store the folder path and update the index
     from runit.settings import get_storage_mode

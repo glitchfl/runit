@@ -1,6 +1,9 @@
+import base64
+import binascii
 import sys
 
 import click
+import yaml
 
 from runit.config import (
     CommandConfig,
@@ -10,11 +13,15 @@ from runit.config import (
     load_config,
     load_disabled_builtins,
     load_merged_config,
+    parse_commands_dict,
     save_config,
     save_disabled_builtins,
+    serialize_commands_dict,
 )
 from runit.exceptions import RunitError
 from runit.runner import execute, parse_captures, parse_params
+
+SHARE_PREFIX = "runit:v1:"
 
 class RunitHelpFormatter(click.HelpFormatter):
     def write_text(self, text):
@@ -52,6 +59,10 @@ Examples:
 Capture output as variables:
   runit add myip "@ip ifconfig en0 | grep inet" "echo {ip}"
   runit myip
+\b
+Share commands:
+  runit export flutter-pc flutter-mobile     Print a code; copy + send
+  runit import runit:v1:eyJjb21tYW5kcyI6...  Asks: local or global?
 """
 
 
@@ -507,3 +518,254 @@ def config_cmd(key, value):
     else:
         click.secho(f"Unknown setting '{key}'.", fg="red", err=True)
         sys.exit(1)
+
+
+@cli.command("export")
+@click.argument("names", nargs=-1)
+@click.option("-g", "--global", "is_global", is_flag=True,
+              help="Look up names in global commands only.")
+@click.option("-N", "--no-names", is_flag=True,
+              help="Strip command names from the share code; importer will be asked to name them.")
+def export_cmd(names, is_global, no_names):
+    """Export commands as a copy-pasteable share code.
+
+    \b
+    runit export                              Export every saved command
+    runit export flutter-pc flutter-mobile    Export selected commands
+    runit export -g my-alias                  Look up name in global only
+    runit export -N flutter-pc flutter-mobile Strip names; importer picks new ones
+    \b
+    Pipe straight to your clipboard:
+      runit export flutter-pc flutter-mobile | pbcopy
+    """
+    try:
+        if is_global:
+            source = load_config(global_config_path())
+        else:
+            source = {**load_config(global_config_path()), **load_config()}
+    except RunitError as e:
+        click.secho(str(e), fg="red", err=True)
+        sys.exit(1)
+
+    if names:
+        unknown = [n for n in names if n not in source]
+        if unknown:
+            scope = "global" if is_global else "your saved"
+            click.secho(
+                f"Not found in {scope} commands: {', '.join(unknown)}",
+                fg="red",
+                err=True,
+            )
+            sys.exit(1)
+        selected = {n: source[n] for n in names}
+    else:
+        if not source:
+            click.secho("No commands to export.", fg="yellow", err=True)
+            sys.exit(1)
+        selected = source
+
+    serialized = serialize_commands_dict(selected)
+    if no_names:
+        anonymous = {f"cmd{i + 1}": entry for i, entry in enumerate(serialized.values())}
+        payload = {"anonymous": True, "commands": anonymous}
+    else:
+        payload = {"commands": serialized}
+    yaml_text = yaml.dump(payload, default_flow_style=False, sort_keys=False)
+    encoded = base64.urlsafe_b64encode(yaml_text.encode("utf-8")).decode("ascii")
+
+    click.echo(SHARE_PREFIX + encoded)
+    suffix = ", names stripped" if no_names else ""
+    click.secho(
+        f"Share with: runit import <code>  ({len(selected)} command(s){suffix})",
+        fg="green",
+        err=True,
+    )
+
+
+@cli.command("import")
+@click.argument("code", required=False)
+@click.option("-g", "--global", "is_global", is_flag=True,
+              help="Save imported commands globally.")
+@click.option("-l", "--local", "is_local", is_flag=True,
+              help="Save imported commands to this project.")
+@click.option("--force", is_flag=True, help="Overwrite existing commands with the same name.")
+def import_cmd(code, is_global, is_local, force):
+    """Import commands from a share code.
+
+    \b
+    runit import <code>           Asks whether to save locally or globally
+    runit import <code> -l        Save to this project
+    runit import <code> -g        Save globally
+    runit import <code> --force   Overwrite existing commands of the same name
+    \b
+    If the code includes names, you'll be asked whether to rename any.
+    If it was exported with -N (no names), you'll be prompted to name each one.
+    \b
+    Read the code from stdin:
+      pbpaste | runit import -l
+    """
+    if is_global and is_local:
+        click.secho("Pass either --global or --local, not both.", fg="red", err=True)
+        sys.exit(1)
+
+    code_from_stdin = code is None
+    if code_from_stdin:
+        code = sys.stdin.read()
+        try:
+            sys.stdin = open("/dev/tty", "r")
+        except OSError:
+            pass
+    code = code.strip()
+
+    if not code.startswith(SHARE_PREFIX):
+        click.secho(
+            f"Not a valid runit share code (expected '{SHARE_PREFIX}' prefix).",
+            fg="red",
+            err=True,
+        )
+        sys.exit(1)
+
+    encoded = code[len(SHARE_PREFIX):]
+    try:
+        yaml_bytes = base64.urlsafe_b64decode(encoded.encode("ascii"))
+    except (binascii.Error, ValueError):
+        click.secho("Share code is corrupted (base64 decode failed).", fg="red", err=True)
+        sys.exit(1)
+
+    try:
+        raw = yaml.safe_load(yaml_bytes.decode("utf-8"))
+    except (yaml.YAMLError, UnicodeDecodeError) as e:
+        click.secho(f"Share code is corrupted ({e}).", fg="red", err=True)
+        sys.exit(1)
+
+    is_anonymous = isinstance(raw, dict) and bool(raw.get("anonymous", False))
+
+    try:
+        incoming = parse_commands_dict(raw)
+    except RunitError as e:
+        click.secho(str(e), fg="red", err=True)
+        sys.exit(1)
+
+    if not incoming:
+        click.secho("Share code contains no commands.", fg="yellow", err=True)
+        sys.exit(1)
+
+    is_tty = sys.stdin is not None and sys.stdin.isatty()
+
+    incoming = _resolve_import_names(incoming, is_anonymous, is_tty)
+
+    if is_global:
+        scope, dest = "global", global_config_path()
+    elif is_local:
+        scope, dest = "project", find_config()
+    else:
+        if not is_tty:
+            click.secho(
+                "Pass -l (local) or -g (global) when running non-interactively.",
+                fg="red",
+                err=True,
+            )
+            sys.exit(1)
+        choice = click.prompt(
+            "Save to",
+            type=click.Choice(["local", "global"]),
+            default="local",
+        )
+        if choice == "global":
+            scope, dest = "global", global_config_path()
+        else:
+            scope, dest = "project", find_config()
+
+    try:
+        existing = load_config(dest)
+    except RunitError as e:
+        click.secho(str(e), fg="red", err=True)
+        sys.exit(1)
+
+    imported = []
+    skipped = []
+    for name, cmd in incoming.items():
+        if name in existing and not force:
+            skipped.append(name)
+            continue
+        cmd.name = name
+        existing[name] = cmd
+        imported.append(name)
+
+    if imported:
+        save_config(existing, dest)
+
+    if skipped:
+        click.secho(
+            f"Skipped (already exist, pass --force to overwrite): {', '.join(skipped)}",
+            fg="yellow",
+        )
+
+    if imported:
+        click.secho(
+            f"Imported {len(imported)} command(s) into {scope}: {', '.join(imported)}",
+            fg="green",
+        )
+    elif not skipped:
+        click.echo("Nothing imported.")
+
+
+def _show_steps(cmd: CommandConfig) -> None:
+    for step in cmd.steps:
+        click.echo(f"  {step}")
+
+
+def _prompt_unique_name(prompt_text: str, taken: dict, default: str | None = None) -> str:
+    while True:
+        new_name = click.prompt(prompt_text, default=default, type=str).strip()
+        if not new_name:
+            click.secho("Name cannot be empty.", fg="yellow", err=True)
+            continue
+        if new_name != default and new_name in taken:
+            click.secho(f"'{new_name}' is already used in this import.", fg="yellow", err=True)
+            continue
+        return new_name
+
+
+def _resolve_import_names(
+    incoming: dict[str, CommandConfig],
+    is_anonymous: bool,
+    is_tty: bool,
+) -> dict[str, CommandConfig]:
+    if is_anonymous:
+        if not is_tty:
+            click.secho(
+                "Anonymous share code: a TTY is required to name the commands.",
+                fg="red",
+                err=True,
+            )
+            sys.exit(1)
+        click.echo(f"Naming {len(incoming)} command(s) from the share code:")
+        named: dict[str, CommandConfig] = {}
+        for i, cmd in enumerate(incoming.values(), 1):
+            click.echo()
+            click.secho(f"Command {i} of {len(incoming)}:", bold=True)
+            _show_steps(cmd)
+            new_name = _prompt_unique_name("Name", named)
+            cmd.name = new_name
+            named[new_name] = cmd
+        click.echo()
+        return named
+
+    if not is_tty:
+        return incoming
+
+    click.echo(f"Importing: {', '.join(incoming.keys())}")
+    if not click.confirm("Rename any of these?", default=False):
+        return incoming
+
+    renamed: dict[str, CommandConfig] = {}
+    for original, cmd in incoming.items():
+        click.echo()
+        click.secho(original, bold=True)
+        _show_steps(cmd)
+        new_name = _prompt_unique_name("Name", renamed, default=original)
+        cmd.name = new_name
+        renamed[new_name] = cmd
+    click.echo()
+    return renamed
